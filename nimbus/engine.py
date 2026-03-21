@@ -171,11 +171,28 @@ class NimbusEngine:
                 if event:
                     yield event
 
-        except asyncio.CancelledError:
-            proc.kill()
-            raise
+        except (asyncio.CancelledError, GeneratorExit):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            return
+        except Exception as e:
+            log.error(f"Streaming error: {e}")
+            yield StreamEvent(
+                event_type="result",
+                content=f"Streaming error: {e}",
+                raw={"type": "result", "is_error": True, "result": str(e),
+                     "total_cost_usd": 0, "duration_ms": 0, "session_id": "",
+                     "num_turns": 0, "stop_reason": "error"}
+            )
         finally:
-            await proc.wait()
+            try:
+                if proc.returncode is None:
+                    proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
 
     def _parse_stream_event(self, data: dict) -> Optional[StreamEvent]:
         event_type = data.get("type", "")

@@ -108,25 +108,37 @@ class SessionManager:
         try:
             # Stream events to Telegram
             final_result = None
-            async for event in self.engine.run_task_streaming(
+            stream = self.engine.run_task_streaming(
                 prompt=task.prompt,
                 project_path=project_path,
                 system_prompt=system_prompt,
-            ):
-                if on_stream:
-                    await on_stream(event, task)
+            )
 
-                if event.event_type == "result":
-                    raw = event.raw
-                    final_result = EngineResult(
-                        success=not raw.get("is_error", False),
-                        result=raw.get("result", ""),
-                        cost_usd=raw.get("total_cost_usd", 0),
-                        duration_ms=raw.get("duration_ms", 0),
-                        session_id=raw.get("session_id", ""),
-                        num_turns=raw.get("num_turns", 0),
-                        stop_reason=raw.get("stop_reason", "end_turn")
-                    )
+            try:
+                async for event in stream:
+                    if on_stream:
+                        try:
+                            await on_stream(event, task)
+                        except Exception as e:
+                            log.warning(f"Task #{task.id} stream callback error: {e}")
+
+                    if event.event_type == "result":
+                        raw = event.raw
+                        final_result = EngineResult(
+                            success=not raw.get("is_error", False),
+                            result=raw.get("result", ""),
+                            cost_usd=raw.get("total_cost_usd", 0),
+                            duration_ms=raw.get("duration_ms", 0),
+                            session_id=raw.get("session_id", ""),
+                            num_turns=raw.get("num_turns", 0),
+                            stop_reason=raw.get("stop_reason", "end_turn")
+                        )
+            finally:
+                # Safely close the async generator to prevent RuntimeError
+                try:
+                    await stream.aclose()
+                except RuntimeError:
+                    pass
 
             if final_result:
                 status = TaskStatus.COMPLETED if final_result.success else TaskStatus.FAILED
