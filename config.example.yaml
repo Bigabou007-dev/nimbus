@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────
+#  Nimbus Configuration
+#  Copy to config.yaml and fill in your values
+# ─────────────────────────────────────────────
+
+telegram:
+  token: "YOUR_BOT_TOKEN"           # from @BotFather
+  chat_id: "YOUR_CHAT_ID"           # from @userinfobot
+  bot_name: "NimbusBot"
+
+claude:
+  default_model: "sonnet"           # sonnet, opus, haiku
+  permission_mode: "default"             # "default" prompts for approval. Use "bypassPermissions" ONLY on trusted, isolated servers
+  max_budget_usd: 5.0               # per-task budget cap
+  timeout: 600                      # seconds before task times out
+  default_effort: "high"            # low, medium, high, max
+
+paths:
+  working_dir: "~/projects"         # default working directory
+  uploads: "~/.nimbus/uploads"      # where uploaded files are saved
+  db: "~/.nimbus/nimbus.db"         # SQLite database path
+
+# ── Projects ──────────────────────────────────
+# Define your projects. Use #project-name in chat to target one.
+projects:
+  frontend:
+    path: "~/projects/my-app/frontend"
+    description: "React frontend"
+    deploy_cmd: "npm run build && npx vercel --prod"
+    test_cmd: "npm test"
+  api:
+    path: "~/projects/my-app/api"
+    description: "NestJS backend API"
+    test_cmd: "npm run test:e2e"
+  docs:
+    path: "~/projects/my-app/docs"
+    description: "Documentation site"
+
+# ── Agents ────────────────────────────────────
+# Agent personas with custom system prompts.
+# Use @agent-name in chat to route a task.
+agents:
+  frontend:
+    description: "Frontend specialist — React, CSS, UI/UX"
+    prompt_file: "~/prompts/frontend.md"
+  backend:
+    description: "Backend specialist — APIs, databases, infra"
+    prompt_file: "~/prompts/backend.md"
+  reviewer:
+    description: "Code reviewer — security, performance, best practices"
+    prompt_file: "~/prompts/reviewer.md"
+  devops:
+    description: "DevOps — Docker, CI/CD, deployment"
+    prompt_file: "~/prompts/devops.md"
+
+# ── Workflows ─────────────────────────────────
+# Predefined multi-step workflows.
+workflows:
+  deploy:
+    description: "Deploy a project"
+    steps:
+      - "Run tests"
+      - "Build project"
+      - "Deploy to production"
+      - "Verify deployment"
+  health:
+    description: "Full system health check"
+    steps:
+      - "Check all running services"
+      - "Check disk and memory usage"
+      - "Check SSL certificates"
+      - "Check API endpoints"
+
+# ── Status Board ──────────────────────────────
+status:
+  pin_message: true                 # auto-pin a status message in chat
+  update_interval: 300              # seconds between status refreshes
+  track_costs: true                 # track Claude API costs per task

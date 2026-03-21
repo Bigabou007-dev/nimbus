@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nimbus-ai"
+version = "0.1.0"
+description = "Mobile AI Agent Command Center — Control Claude Code from your phone via Telegram"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Lagoon Tech Systems", email = "dev@lagoontechsystems.com"}
+]
+keywords = ["claude", "telegram", "ai-agent", "devops", "mobile", "remote", "coding"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Communications :: Chat",
+]
+dependencies = [
+    "python-telegram-bot>=20.0",
+    "pyyaml>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Bigabou007-dev/nimbus"
+Repository = "https://github.com/Bigabou007-dev/nimbus"
+Issues = "https://github.com/Bigabou007-dev/nimbus/issues"
+
+[project.scripts]
+nimbus = "nimbus.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["nimbus*"]
