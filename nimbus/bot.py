@@ -278,8 +278,17 @@ class NimbusBot:
         if not self.is_authorized(update.effective_chat.id):
             return
 
+        # Send logo
+        logo_path = Path(__file__).parent.parent / "marketing" / "assets" / "logo_lagoontech.jpg"
+        if logo_path.exists():
+            try:
+                await update.message.reply_photo(photo=open(logo_path, "rb"))
+            except Exception as e:
+                log.warning(f"Failed to send logo: {e}")
+
         await update.message.reply_text(
-            "Nimbus — Mobile AI Command Center\n\n"
+            "Nimbus — Mobile AI Command Center\n"
+            "by LagoonTech Systems\n\n"
             "Send any message to run a Claude task.\n\n"
             "Prefixes:\n"
             "  @agent message — Route to agent\n"
@@ -338,12 +347,12 @@ class NimbusBot:
             text += "\nActive Tasks:\n"
             for t in status["running_tasks"]:
                 elapsed = int(time.time() - t.created_at)
-                text += f"  #{t.id} ({elapsed}s) {t.prompt[:40]}...\n"
+                text += f"  /task{t.id} ({elapsed}s) {t.prompt[:35]}...\n"
 
         if status["queued_tasks"]:
             text += "\nQueued:\n"
             for t in status["queued_tasks"]:
-                text += f"  #{t.id} {t.prompt[:40]}...\n"
+                text += f"  /task{t.id} {t.prompt[:35]}...\n"
 
         if hasattr(message_or_query, 'reply_text'):
             await message_or_query.reply_text(text, reply_markup=self.main_keyboard())
@@ -365,22 +374,32 @@ class NimbusBot:
             proj = f"[{t.project}]" if t.project else ""
             agent = f"@{t.agent}" if t.agent else ""
             cost = f"${t.cost_usd:.3f}" if t.cost_usd else ""
-            lines.append(f"  [{icon}] #{t.id} {proj}{agent} {t.prompt[:35]}... {cost}")
+            lines.append(f"[{icon}] /task{t.id} {proj}{agent} {t.prompt[:30]}... {cost}")
 
         await update.message.reply_text("\n".join(lines))
 
     async def cmd_task_detail(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Handles both /task <id> and /task<id> (e.g. /task3)."""
         if not self.is_authorized(update.effective_chat.id):
             return
-        args = ctx.args
-        if not args:
-            await update.message.reply_text("Usage: /task <id>")
-            return
 
-        try:
-            task_id = int(args[0])
-        except ValueError:
-            await update.message.reply_text("Invalid task ID.")
+        # Extract task ID from command text
+        text = update.message.text.strip()
+        task_id = None
+
+        # Try /task<N> format (e.g. /task3, /task42)
+        match = re.match(r'^/task(\d+)', text)
+        if match:
+            task_id = int(match.group(1))
+        elif ctx.args:
+            # Fallback: /task <N>
+            try:
+                task_id = int(ctx.args[0])
+            except ValueError:
+                pass
+
+        if task_id is None:
+            await update.message.reply_text("Usage: /task3 or /task 3")
             return
 
         task = self.store.get_task(task_id)
@@ -576,7 +595,7 @@ class NimbusBot:
             for t in tasks:
                 icon = {"completed": "ok", "failed": "err", "running": ">>",
                         "queued": "..", "cancelled": "xx"}.get(t.status.value, "?")
-                lines.append(f"  [{icon}] #{t.id} {t.prompt[:40]}...")
+                lines.append(f"[{icon}] /task{t.id} {t.prompt[:35]}...")
             await query.edit_message_text("\n".join(lines), reply_markup=self.main_keyboard())
         elif data == "cmd:screen":
             await query.edit_message_text("Capturing screen...")
@@ -920,6 +939,11 @@ class NimbusBot:
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("tasks", self.cmd_tasks))
         app.add_handler(CommandHandler("task", self.cmd_task_detail))
+        # Catch /task1, /task2, /task42 etc. — tappable task IDs
+        app.add_handler(MessageHandler(
+            filters.Regex(r'^/task\d+'),
+            self.cmd_task_detail
+        ))
         app.add_handler(CommandHandler("cancel", self.cmd_cancel))
         app.add_handler(CommandHandler("projects", self.cmd_projects))
         app.add_handler(CommandHandler("agents", self.cmd_agents))
