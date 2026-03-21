@@ -22,6 +22,7 @@ from telegram.constants import ParseMode, ChatAction
 from .engine import NimbusEngine, StreamEvent, EngineResult
 from .sessions import SessionManager
 from .store import NimbusStore, TaskStatus
+from .security import RateLimiter, PassphraseAuth, AuditLog, CommandFilter
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +57,24 @@ class NimbusBot:
         self.engine = NimbusEngine(config.get("claude", {}))
         self.sessions = SessionManager(self.engine, self.store, config)
 
+        # Security
+        sec_config = config.get("security", {})
+        rate_cfg = sec_config.get("rate_limit", {})
+        self.rate_limiter = RateLimiter(
+            max_requests=rate_cfg.get("max_requests", 30),
+            window_seconds=rate_cfg.get("window_seconds", 60),
+        )
+        self.passphrase_auth = PassphraseAuth(
+            passphrase=sec_config.get("passphrase")
+        )
+        self.audit = AuditLog(
+            log_path=sec_config.get("audit_log", "~/.nimbus/audit.log")
+        )
+        self.cmd_filter = CommandFilter(
+            blocklist=sec_config.get("bash_blocklist"),
+            allowlist=sec_config.get("bash_allowlist"),
+        )
+
         # Upload dir
         self.upload_dir = os.path.expanduser(
             config.get("paths", {}).get("uploads", "~/.nimbus-uploads")
@@ -68,6 +87,39 @@ class NimbusBot:
 
     def is_authorized(self, chat_id: int) -> bool:
         return str(chat_id) == self.chat_id
+
+    async def check_access(self, update: Update) -> bool:
+        """Full access check: chat ID + rate limit + passphrase. Returns True if allowed."""
+        chat_id = update.effective_chat.id
+        username = update.effective_user.username or ""
+
+        # Chat ID check
+        if not self.is_authorized(chat_id):
+            self.audit.log_unauthorized(str(chat_id), username)
+            return False
+
+        # Rate limit check
+        if not self.rate_limiter.is_allowed(str(chat_id)):
+            self.audit.log_rate_limited(str(chat_id))
+            await update.message.reply_text(
+                f"Rate limited. Max {self.rate_limiter.max_requests} requests per {self.rate_limiter.window}s. "
+                f"Remaining: {self.rate_limiter.remaining(str(chat_id))}"
+            )
+            return False
+
+        # Passphrase check
+        if not self.passphrase_auth.is_authenticated(str(chat_id)):
+            text = update.message.text or ""
+            if self.passphrase_auth.attempt(str(chat_id), text):
+                self.audit.log_auth_attempt(str(chat_id), True)
+                await update.message.reply_text("Authenticated. Welcome to Nimbus.")
+                return False  # consume the passphrase message, don't process as task
+            else:
+                self.audit.log_auth_attempt(str(chat_id), False)
+                await update.message.reply_text("Passphrase required. Send your passphrase to continue.")
+                return False
+
+        return True
 
     # ── Keyboards ────────────────────────────────────────────
 
@@ -407,13 +459,21 @@ class NimbusBot:
         )
 
     async def cmd_bash(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        if not self.is_authorized(update.effective_chat.id):
+        if not await self.check_access(update):
             return
         cmd_text = update.message.text.replace("/bash", "", 1).strip()
         if not cmd_text:
             await update.message.reply_text("Usage: /bash <command>")
             return
 
+        # Command filtering
+        allowed, reason = self.cmd_filter.is_allowed(cmd_text)
+        if not allowed:
+            self.audit.log_action(str(update.effective_chat.id), "BASH_BLOCKED", f"{reason}: {cmd_text[:100]}")
+            await update.message.reply_text(f"Command blocked: {reason}")
+            return
+
+        self.audit.log_bash(str(update.effective_chat.id), cmd_text)
         await update.message.reply_text(f"$ {cmd_text[:60]}...")
         cwd = self.config.get("paths", {}).get("working_dir", "~/automation")
         result = await self.engine.run_bash(cmd_text, cwd=cwd)
@@ -627,10 +687,11 @@ class NimbusBot:
     # ── File / Photo / Voice Handlers ────────────────────────
 
     async def handle_document(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        if not self.is_authorized(update.effective_chat.id):
+        if not await self.check_access(update):
             return
 
         doc = update.message.document
+        self.audit.log_file_upload(str(update.effective_chat.id), doc.file_name or "unknown")
         tg_file = await ctx.bot.get_file(doc.file_id)
         filename = doc.file_name or f"upload_{int(time.time())}"
         filepath = os.path.join(self.upload_dir, filename)
@@ -651,7 +712,7 @@ class NimbusBot:
             )
 
     async def handle_photo(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        if not self.is_authorized(update.effective_chat.id):
+        if not await self.check_access(update):
             return
 
         photo = update.message.photo[-1]
@@ -672,7 +733,7 @@ class NimbusBot:
             )
 
     async def handle_voice(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        if not self.is_authorized(update.effective_chat.id):
+        if not await self.check_access(update):
             return
 
         voice = update.message.voice
@@ -689,7 +750,7 @@ class NimbusBot:
     # ── Main Message Handler ─────────────────────────────────
 
     async def handle_message(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        if not self.is_authorized(update.effective_chat.id):
+        if not await self.check_access(update):
             return
 
         text = update.message.text
@@ -702,6 +763,13 @@ class NimbusBot:
         if text.startswith('$'):
             cmd = text[1:].strip()
             if cmd:
+                # Command filtering
+                allowed, reason = self.cmd_filter.is_allowed(cmd)
+                if not allowed:
+                    self.audit.log_action(str(update.effective_chat.id), "BASH_BLOCKED", f"{reason}: {cmd[:100]}")
+                    await update.message.reply_text(f"Command blocked: {reason}")
+                    return
+                self.audit.log_bash(str(update.effective_chat.id), cmd)
                 cwd = self.config.get("paths", {}).get("working_dir", "~/automation")
                 result = await self.engine.run_bash(cmd, cwd=cwd)
                 for chunk in split_message(f"$ {cmd}\n\n{result}"):
@@ -753,6 +821,8 @@ class NimbusBot:
                 [InlineKeyboardButton("Cancel", callback_data="task:cancel:pending")]
             ])
         )
+
+        self.audit.log_task(str(update.effective_chat.id), text, project or "", agent or "")
 
         task = await self.sessions.submit_task(
             prompt=text, project=project, agent=agent,

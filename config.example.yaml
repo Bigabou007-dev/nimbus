@@ -71,6 +71,28 @@ workflows:
       - "Check SSL certificates"
       - "Check API endpoints"
 
+# ── Security ──────────────────────────────────
+security:
+  # Optional passphrase — user must send this before bot responds
+  # passphrase: "your-secret-phrase"
+
+  # Rate limiting
+  rate_limit:
+    max_requests: 30                # max requests per window
+    window_seconds: 60              # sliding window in seconds
+
+  # Audit log — every action is logged here
+  audit_log: "~/.nimbus/audit.log"
+
+  # Shell command filtering for /bash and $ prefix
+  # bash_blocklist:                 # default blocks rm -rf /, shutdown, etc.
+  #   - "rm -rf /"
+  #   - "shutdown"
+  # bash_allowlist:                 # if set, ONLY these commands are allowed
+  #   - "docker"
+  #   - "git"
+  #   - "npm"
+
 # ── Status Board ──────────────────────────────
 status:
   pin_message: true                 # auto-pin a status message in chat

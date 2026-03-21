@@ -225,11 +225,109 @@ journalctl --user -u nimbus -f      # live logs
 
 ## Security
 
-- **Chat ID authorization**: Only your Telegram account can interact with the bot. All other messages are silently dropped.
-- **No credentials in code**: Token and chat ID live in `config.yaml`, which is gitignored. Nothing sensitive in the source.
-- **Local execution**: All processing happens on your server. Message content passes through the Telegram Bot API (a third-party service) and the Claude API. No other external services are involved.
-- **Permission modes**: The example config defaults to `default` mode (Claude asks for approval before destructive actions). You can set `bypassPermissions` for trusted, isolated environments — but understand the risk.
-- **SQL injection protected**: All database queries use parameterized statements.
+Nimbus gives an AI agent shell access to your server. That demands real security. Here's what's built in and how to harden it.
+
+### Built-in Protections (enabled by default)
+
+| Layer | What it does |
+|---|---|
+| **Chat ID authorization** | Only your Telegram account can interact with the bot. All other messages are silently dropped. No response, no error — silent reject. |
+| **Rate limiting** | 30 requests per 60-second window (configurable). Prevents runaway loops or abuse. |
+| **Command blocklist** | Dangerous shell commands (`rm -rf /`, `shutdown`, `mkfs`, fork bombs) are blocked before execution. |
+| **Audit logging** | Every action is logged to `~/.nimbus/audit.log` — tasks, bash commands, file uploads, auth attempts, blocked commands. Append-only. |
+| **SQL injection protection** | All database queries use parameterized statements. |
+| **No credentials in code** | Token and chat ID live in `config.yaml`, which is gitignored. Nothing sensitive in source. |
+
+### Optional: Passphrase Authentication
+
+Add a second layer — even if someone has your chat ID, they need the passphrase:
+
+```yaml
+security:
+  passphrase: "your-secret-phrase"
+```
+
+The bot won't respond to any command until the correct passphrase is sent. Session persists until bot restarts.
+
+### Optional: Command Allowlist
+
+Lock down shell access to specific commands only:
+
+```yaml
+security:
+  bash_allowlist:
+    - "docker"
+    - "git"
+    - "npm"
+    - "systemctl"
+```
+
+When an allowlist is set, **only** commands starting with these prefixes can run. Everything else is rejected.
+
+### Recommended: Network Hardening with Tailscale
+
+The strongest security setup combines Nimbus with [Tailscale](https://tailscale.com) (free for personal use):
+
+```
+Your Phone                    Tailscale Network                   Your VPS
+(Telegram app)                (encrypted mesh)                    (Nimbus)
+     |                              |                                |
+     |  message to bot  ──────►    Telegram API    ──────►    Bot polls API
+     |                              (HTTPS)                    over Tailscale IP
+     |                                                               |
+     |                                                         claude -p runs
+     |                                                         on localhost
+     |  ◄──────────────────    response via API    ◄──────────       |
+```
+
+**How to set this up:**
+
+1. Install Tailscale on your VPS and phone
+2. Bind Nimbus to the Tailscale interface (no public ports needed)
+3. Only expose ports 80/443 via your reverse proxy (Nginx Proxy Manager) for web projects
+4. SSH, Nimbus, and all admin tools are only accessible via the Tailscale mesh — invisible to the public internet
+
+```bash
+# Verify: your VPS should NOT have bot-related ports open to 0.0.0.0
+ss -tlnp | grep python   # should show 127.0.0.1 or Tailscale IP only
+```
+
+The Telegram Bot API uses outbound HTTPS polling — Nimbus makes requests **to** Telegram, not the other way around. No inbound ports need to be open for the bot to work. Your VPS initiates all connections.
+
+### Data Flow — What Goes Where
+
+| Data | Where it goes |
+|---|---|
+| Your Telegram messages | Telegram Bot API servers (encrypted in transit) |
+| Claude prompts + responses | Anthropic API (encrypted in transit) |
+| Task history + costs | Local SQLite database on your VPS |
+| Audit logs | Local file on your VPS |
+| Uploaded files | Local directory on your VPS |
+| Source code / file edits | Never leaves your VPS |
+
+**Bottom line**: Your code and files never leave your server. Only prompts and responses travel through Telegram and Anthropic's APIs, both over HTTPS.
+
+### Claude Permission Modes
+
+| Mode | What Claude can do | When to use |
+|---|---|---|
+| `default` | Asks for approval before file writes and shell commands | **Recommended for most setups** |
+| `plan` | Can only read and plan, cannot execute | Ultra-safe, review-only mode |
+| `bypassPermissions` | Full unrestricted access | Only on isolated, trusted servers behind Tailscale |
+
+### Audit Log Format
+
+Every action is logged to `~/.nimbus/audit.log`:
+
+```
+2026-03-21 14:22:01 | chat:1042076116 | TASK_SUBMITTED | [marche] @gohan fix the navbar component
+2026-03-21 14:22:45 | chat:1042076116 | BASH_COMMAND | docker ps
+2026-03-21 14:23:01 | chat:9999999999 | UNAUTHORIZED_ACCESS | username=stranger
+2026-03-21 14:23:05 | chat:1042076116 | BASH_BLOCKED | Blocked: matches dangerous pattern 'rm -rf /': rm -rf /tmp/../
+2026-03-21 14:25:00 | chat:1042076116 | FILE_UPLOAD | screenshot.png
+```
+
+Review it anytime: `tail -50 ~/.nimbus/audit.log`
 
 ## Cost Tracking
 
