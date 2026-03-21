@@ -43,7 +43,7 @@ success "Config found"
 
 # 3. Create data directories
 mkdir -p ~/.nimbus
-mkdir -p ~/automation/.nimbus-uploads
+mkdir -p ~/.nimbus/uploads
 success "Data directories ready"
 
 # 4. Stop old dispatch bot if running

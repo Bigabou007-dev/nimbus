@@ -51,11 +51,15 @@ class SessionManager:
         )
         log.info(f"Task #{task.id} created: {prompt[:60]}...")
 
-        # Try to run immediately if we have capacity
         if self.slots_available > 0:
-            asyncio.create_task(
+            # Mark RUNNING immediately to prevent queue processor from picking it up
+            self.store.update_task(task.id, status=TaskStatus.RUNNING)
+            task.status = TaskStatus.RUNNING
+            atask = asyncio.create_task(
                 self._run_task(task, on_stream, on_complete)
             )
+            self.active_tasks[task.id] = atask
+            atask.add_done_callback(lambda _: self.active_tasks.pop(task.id, None))
         else:
             log.info(f"Task #{task.id} queued (all slots busy)")
             if on_stream:
@@ -85,8 +89,10 @@ class SessionManager:
         on_complete: Callable[[EngineResult, Task], Awaitable] = None
     ):
         """Core task execution logic."""
-        self.store.update_task(task.id, status=TaskStatus.RUNNING)
-        task.status = TaskStatus.RUNNING
+        # Status already set to RUNNING in submit_task or _process_queue
+        if task.status != TaskStatus.RUNNING:
+            self.store.update_task(task.id, status=TaskStatus.RUNNING)
+            task.status = TaskStatus.RUNNING
 
         # Resolve project path
         project_path = None
@@ -96,7 +102,9 @@ class SessionManager:
             project_path = proj.get("path")
 
         # Resolve agent system prompt
+        agent_name = None
         if task.agent and task.agent in self.config.get("agents", {}):
+            agent_name = task.agent
             agent_config = self.config["agents"][task.agent]
             prompt_file = agent_config.get("prompt_file", "")
             if prompt_file:
@@ -106,11 +114,11 @@ class SessionManager:
                         system_prompt = f.read()
 
         try:
-            # Stream events to Telegram
             final_result = None
             stream = self.engine.run_task_streaming(
                 prompt=task.prompt,
                 project_path=project_path,
+                agent=agent_name,
                 system_prompt=system_prompt,
             )
 
@@ -134,7 +142,6 @@ class SessionManager:
                             stop_reason=raw.get("stop_reason", "end_turn")
                         )
             finally:
-                # Safely close the async generator to prevent RuntimeError
                 try:
                     await stream.aclose()
                 except RuntimeError:
@@ -181,11 +188,12 @@ class SessionManager:
                 )
 
     async def cancel_task(self, task_id: int) -> bool:
-        """Cancel a running task."""
+        """Cancel a running or queued task."""
+        # Cancel running async task
         if task_id in self.active_tasks:
             self.active_tasks[task_id].cancel()
-            del self.active_tasks[task_id]
             return True
+        # Cancel queued task
         task = self.store.get_task(task_id)
         if task and task.status == TaskStatus.QUEUED:
             self.store.update_task(task_id, status=TaskStatus.CANCELLED, finished_at=time.time())
@@ -196,10 +204,16 @@ class SessionManager:
         """Background loop that picks up queued tasks."""
         while True:
             try:
-                task = self.store.next_queued()
-                if task and self.slots_available > 0:
-                    log.info(f"Queue processor picking up task #{task.id}")
-                    asyncio.create_task(self._run_task(task))
+                if self.slots_available > 0:
+                    task = self.store.next_queued()
+                    if task:
+                        # Mark RUNNING before dispatching to prevent double-pickup
+                        self.store.update_task(task.id, status=TaskStatus.RUNNING)
+                        task.status = TaskStatus.RUNNING
+                        log.info(f"Queue processor picking up task #{task.id}")
+                        atask = asyncio.create_task(self._run_task(task))
+                        self.active_tasks[task.id] = atask
+                        atask.add_done_callback(lambda _, tid=task.id: self.active_tasks.pop(tid, None))
             except Exception as e:
                 log.error(f"Queue processor error: {e}")
             await asyncio.sleep(2)

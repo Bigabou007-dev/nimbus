@@ -4,6 +4,7 @@ Nimbus Store — SQLite-backed task history and persistent queue.
 
 import sqlite3
 import json
+import threading
 import time
 import os
 from pathlib import Path
@@ -45,6 +46,7 @@ class NimbusStore:
     def __init__(self, db_path: str = "~/.nimbus/nimbus.db"):
         self.db_path = os.path.expanduser(db_path)
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self._lock = threading.Lock()
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
@@ -75,12 +77,13 @@ class NimbusStore:
     def create_task(self, prompt: str, project: str = None,
                     agent: str = None, telegram_msg_id: int = None) -> Task:
         now = time.time()
-        cur = self.conn.execute(
-            """INSERT INTO tasks (prompt, project, agent, status, created_at, telegram_msg_id)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (prompt, project, agent, TaskStatus.QUEUED.value, now, telegram_msg_id)
-        )
-        self.conn.commit()
+        with self._lock:
+            cur = self.conn.execute(
+                """INSERT INTO tasks (prompt, project, agent, status, created_at, telegram_msg_id)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (prompt, project, agent, TaskStatus.QUEUED.value, now, telegram_msg_id)
+            )
+            self.conn.commit()
         return Task(
             id=cur.lastrowid, prompt=prompt, project=project, agent=agent,
             status=TaskStatus.QUEUED, result=None, cost_usd=0.0,
@@ -97,10 +100,11 @@ class NimbusStore:
             sets.append(f"{k} = ?")
             vals.append(v)
         vals.append(task_id)
-        self.conn.execute(
-            f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", vals
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", vals
+            )
+            self.conn.commit()
 
     def get_task(self, task_id: int) -> Optional[Task]:
         row = self.conn.execute(
@@ -142,7 +146,7 @@ class NimbusStore:
                 COALESCE(SUM(cost_usd), 0) as total_cost,
                 COALESCE(SUM(duration_ms), 0) as total_duration
             FROM tasks
-            WHERE date(created_at, 'unixepoch') = ?
+            WHERE date(created_at, 'unixepoch', 'localtime') = ?
         """, (today,)).fetchone()
         return dict(row)
 

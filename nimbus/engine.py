@@ -156,8 +156,22 @@ class NimbusEngine:
             )
             return
 
+        deadline = asyncio.get_event_loop().time() + self.timeout
+
         try:
             async for line in proc.stdout:
+                if asyncio.get_event_loop().time() > deadline:
+                    log.warning("Streaming task timed out")
+                    yield StreamEvent(
+                        event_type="result",
+                        content=f"Task timed out after {self.timeout}s",
+                        raw={"type": "result", "is_error": True,
+                             "result": f"Task timed out after {self.timeout}s",
+                             "total_cost_usd": 0, "duration_ms": self.timeout * 1000,
+                             "session_id": "", "num_turns": 0, "stop_reason": "timeout"}
+                    )
+                    break
+
                 line = line.decode().strip()
                 if not line:
                     continue

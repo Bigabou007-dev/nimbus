@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="marketing/assets/logo_lagoontech.jpg" alt="LagoonTech Systems" width="600">
+</p>
+
 # Nimbus
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -9,9 +13,6 @@
 Nimbus turns a Telegram chat into a full AI development command center. Send a message from your phone, and Claude Code runs headlessly on your server — reading files, editing code, running tests, deploying projects — then reports back with clean, structured results and cost tracking.
 
 No laptop. No SSH app. No IDE. Just your phone and a Telegram chat.
-
-<!-- TODO: Add demo GIF here -->
-<!-- ![Nimbus Demo](docs/demo.gif) -->
 
 ---
 
@@ -387,6 +388,10 @@ MIT — use it however you want.
 
 ---
 
-Built in Abidjan by [Lagoon Tech Systems](https://lagoontechsystems.com). Born from managing 7 production projects from a phone.
+<p align="center">
+  <img src="marketing/assets/logo_lagoontech.jpg" alt="LagoonTech Systems" width="300">
+  <br>
+  Built in Abidjan by <a href="https://lagoontechsystems.com">LagoonTech Systems</a>. Born from managing 7 production projects from a phone.
+</p>
 
 If Nimbus saves you a laptop-open, consider giving the repo a star.

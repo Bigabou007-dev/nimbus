@@ -282,7 +282,8 @@ class NimbusBot:
         logo_path = Path(__file__).parent.parent / "marketing" / "assets" / "logo_lagoontech.jpg"
         if logo_path.exists():
             try:
-                await update.message.reply_photo(photo=open(logo_path, "rb"))
+                with open(logo_path, "rb") as logo_file:
+                    await update.message.reply_photo(photo=logo_file)
             except Exception as e:
                 log.warning(f"Failed to send logo: {e}")
 
@@ -661,7 +662,11 @@ class NimbusBot:
                 result = task.result or "(no result)"
                 await self.app.bot.send_message(chat_id=self.chat_id, text=result[:TG_MAX_LEN])
         elif data.startswith("task:cancel:"):
-            task_id = int(data.split(":")[-1])
+            raw_id = data.split(":")[-1]
+            if not raw_id.isdigit():
+                await query.edit_message_text("Task not yet assigned.", reply_markup=self.main_keyboard())
+                return
+            task_id = int(raw_id)
             ok = await self.sessions.cancel_task(task_id)
             await query.edit_message_text(
                 f"Task #{task_id} {'cancelled' if ok else 'not found'}.",
