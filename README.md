@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="marketing/assets/logo_lagoontech.jpg" alt="LagoonTech Systems" width="600">
-</p>
-
 # Nimbus
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -387,11 +383,5 @@ python -m nimbus --debug
 MIT — use it however you want.
 
 ---
-
-<p align="center">
-  <img src="marketing/assets/logo_lagoontech.jpg" alt="LagoonTech Systems" width="300">
-  <br>
-  Built in Abidjan by <a href="https://lagoontechsystems.com">LagoonTech Systems</a>. Born from managing 7 production projects from a phone.
-</p>
 
 If Nimbus saves you a laptop-open, consider giving the repo a star.

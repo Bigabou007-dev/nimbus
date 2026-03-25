@@ -278,18 +278,8 @@ class NimbusBot:
         if not self.is_authorized(update.effective_chat.id):
             return
 
-        # Send logo
-        logo_path = Path(__file__).parent.parent / "marketing" / "assets" / "logo_lagoontech.jpg"
-        if logo_path.exists():
-            try:
-                with open(logo_path, "rb") as logo_file:
-                    await update.message.reply_photo(photo=logo_file)
-            except Exception as e:
-                log.warning(f"Failed to send logo: {e}")
-
         await update.message.reply_text(
-            "Nimbus — Mobile AI Command Center\n"
-            "by LagoonTech Systems\n\n"
+            "Nimbus — Mobile AI Command Center\n\n"
             "Send any message to run a Claude task.\n\n"
             "Prefixes:\n"
             "  @agent message — Route to agent\n"
@@ -442,6 +432,39 @@ class NimbusBot:
         ok = await self.sessions.cancel_task(task_id)
         await update.message.reply_text(
             f"Task #{task_id} cancelled." if ok else f"Task #{task_id} not found or not cancellable."
+        )
+
+    async def cmd_killall(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Kill ALL running and queued tasks."""
+        if not self.is_authorized(update.effective_chat.id):
+            return
+
+        killed = 0
+        cleaned = 0
+
+        # Cancel all active asyncio tasks
+        for task_id, atask in list(self.sessions.active_tasks.items()):
+            atask.cancel()
+            killed += 1
+        self.sessions.active_tasks.clear()
+
+        # Force-mark any running/queued tasks as cancelled in the DB
+        for task in self.store.get_running_tasks():
+            self.store.update_task(task.id, status=TaskStatus.CANCELLED, finished_at=time.time())
+            cleaned += 1
+        for task in self.store.get_queued_tasks():
+            self.store.update_task(task.id, status=TaskStatus.CANCELLED, finished_at=time.time())
+            cleaned += 1
+
+        # Kill any orphaned claude -p processes
+        import subprocess
+        try:
+            subprocess.run(["pkill", "-f", "claude.*--print"], capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+        await update.message.reply_text(
+            f"Killed {killed} active + cleaned {cleaned} in DB. All clear."
         )
 
     async def cmd_projects(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -921,6 +944,7 @@ class NimbusBot:
             BotCommand("tasks", "Recent tasks"),
             BotCommand("task", "View task detail"),
             BotCommand("cancel", "Cancel a task"),
+            BotCommand("killall", "Kill ALL running + queued tasks"),
             BotCommand("projects", "List projects"),
             BotCommand("agents", "List agents"),
             BotCommand("bash", "Run shell command"),
@@ -950,6 +974,7 @@ class NimbusBot:
             self.cmd_task_detail
         ))
         app.add_handler(CommandHandler("cancel", self.cmd_cancel))
+        app.add_handler(CommandHandler("killall", self.cmd_killall))
         app.add_handler(CommandHandler("projects", self.cmd_projects))
         app.add_handler(CommandHandler("agents", self.cmd_agents))
         app.add_handler(CommandHandler("bash", self.cmd_bash))

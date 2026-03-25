@@ -16,7 +16,6 @@ from gtts import gTTS
 SCRIPT_DIR = Path(__file__).parent
 OUTPUT_DIR = SCRIPT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
-LOGO_PATH = SCRIPT_DIR / "assets" / "logo_lagoontech.jpg"
 
 # Video dimensions (9:16 for Shorts/TikTok)
 WIDTH = 1080
@@ -89,27 +88,15 @@ def create_frame(scene, frame_path):
             (sub_x, sub_y), sub_text, fill=sub_color, font=sub_font, align="center"
         )
 
-    # Branding bar at bottom with logo
+    # Branding bar at bottom
     bar_h = 100
     bar_color = tuple(min(255, c + 15) for c in bg_color)
     draw.rectangle([(0, HEIGHT - bar_h), (WIDTH, HEIGHT)], fill=bar_color)
 
-    # Add logo to branding bar
-    logo_x_offset = 20
-    if LOGO_PATH.exists():
-        logo = Image.open(LOGO_PATH)
-        logo_height = bar_h - 20
-        logo_ratio = logo_height / logo.height
-        logo_width = int(logo.width * logo_ratio)
-        logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
-        logo_y = HEIGHT - bar_h + 10
-        img.paste(logo, (logo_x_offset, logo_y))
-        logo_x_offset = logo_x_offset + logo_width + 15
-
     brand_font = find_font(FONT_PATHS_REGULAR, 26)
-    brand_text = "LAGOONTECH SYSTEMS — github.com/Bigabou007-dev/nimbus"
+    brand_text = "NIMBUS — github.com/Bigabou007-dev/nimbus"
     draw.text(
-        (logo_x_offset, HEIGHT - bar_h + 35),
+        (20, HEIGHT - bar_h + 35),
         brand_text, fill=(120, 120, 130), font=brand_font
     )
 

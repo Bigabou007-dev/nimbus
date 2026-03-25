@@ -22,9 +22,9 @@ paths:
 
 # ── Branding ───────────────────────────────
 branding:
-  logo: "marketing/assets/logo_lagoontech.jpg"  # company logo for bot & marketing
-  company: "LagoonTech Systems"
-  website: "https://lagoontechsystems.com"
+  company: "Nimbus"
+  # logo: "path/to/your-logo.png"  # optional: add your own logo
+  # website: "https://your-site.com"
 
 # ── Projects ──────────────────────────────────
 # Define your projects. Use #project-name in chat to target one.
