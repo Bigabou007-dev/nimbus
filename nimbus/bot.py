@@ -2,22 +2,18 @@
 Nimbus Bot — Telegram interface with inline keyboards, streaming, and rich UX.
 """
 
-import asyncio
 import os
 import time
 import logging
 import re
-from pathlib import Path
 
 from telegram import (
-    Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup,
-    ReplyKeyboardMarkup, KeyboardButton
+    Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, filters, ContextTypes
 )
-from telegram.constants import ParseMode, ChatAction
 
 from .engine import NimbusEngine, StreamEvent, EngineResult
 from .sessions import SessionManager

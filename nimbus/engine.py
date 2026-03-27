@@ -8,7 +8,7 @@ import json
 import os
 import logging
 from dataclasses import dataclass
-from typing import AsyncIterator, Optional, Callable
+from typing import AsyncIterator, Optional
 
 log = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ class NimbusEngine:
                         fp = tool_input.get("file_path", "?")
                         text_parts.append(f"[Reading: {os.path.basename(fp)}]")
                     elif tool_name in ("Glob", "Grep"):
-                        text_parts.append(f"[Searching...]")
+                        text_parts.append("[Searching...]")
                     else:
                         text_parts.append(f"[Tool: {tool_name}]")
 

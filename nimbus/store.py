@@ -3,11 +3,9 @@ Nimbus Store — SQLite-backed task history and persistent queue.
 """
 
 import sqlite3
-import json
 import threading
 import time
 import os
-from pathlib import Path
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass, asdict
